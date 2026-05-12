@@ -1,5 +1,10 @@
 import streamlit as st
-from langchain.prompts import PromptTemplate
+from langchain_groq import ChatGroq
+from langchain_core.prompts import PromptTemplate
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 # ===============================
 # PAGE CONFIG
@@ -43,18 +48,12 @@ Reply in a casual and engaging way:
 )
 
 # ===============================
-# MOCK LLM FUNCTION (since API not working)
+# GROQ LLM
 # ===============================
-def get_mock_response(prompt):
-    return f"""
-🤖 AI RESPONSE (MOCK MODE)
-
-Prompt Used:
-{prompt}
-
-Answer:
-This is a simulated response because API integration is currently unavailable.
-"""
+llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    api_key=os.getenv("GROQ_API_KEY")
+)
 
 # ===============================
 # SIDEBAR
@@ -110,14 +109,14 @@ if user_input:
         final_prompt = fun_prompt.format(question=user_input)
 
     # ===============================
-    # MOCK RESPONSE (replace with LLM later)
+    # GROQ RESPONSE (US-02)
     # ===============================
-    response = get_mock_response(final_prompt)
+    response = llm.invoke(final_prompt)
 
-    st.chat_message("assistant").write(response)
+    st.chat_message("assistant").write(response.content)
 
     # store assistant message
     st.session_state.messages.append({
         "role": "assistant",
-        "content": response
+        "content": response.content
     })
