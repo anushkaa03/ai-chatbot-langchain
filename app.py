@@ -3,7 +3,9 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 from dotenv import load_dotenv
 import os
-
+from langchain_classic.chains import ConversationChain
+from langchain_classic.memory import ConversationBufferMemory
+from langchain_community.callbacks import StreamlitCallbackHandler 
 load_dotenv()
 
 # ===============================
@@ -52,9 +54,22 @@ Reply in a casual and engaging way:
 # ===============================
 llm = ChatGroq(
     model="llama-3.3-70b-versatile",
-    api_key=os.getenv("GROQ_API_KEY")
+    api_key=os.getenv("GROQ_API_KEY"),
+    streaming=True  # [KHUSHI - US-06] Enabled streaming for the "typing" effect
 )
+# ============================================================
+# MEMORY & CHAIN SETUP (US-05 & US-07 and US-08)
+# ============================================================
+# [KHUSHI - US-05]: Conversation Memory implementation using Session State
+if "memory" not in st.session_state:
+    st.session_state.memory = ConversationBufferMemory()
 
+# [KHUSHI - US-07]: Basic Chaining. Linking LLM and Memory into a single pipeline
+conversation = ConversationChain(
+    llm=llm,
+    memory=st.session_state.memory,
+    verbose=True # This proves the Context is being passed in the terminal user story 8 
+)
 # ===============================
 # SIDEBAR
 # ===============================
@@ -67,6 +82,8 @@ prompt_type = st.sidebar.selectbox(
 
 if st.sidebar.button("Clear Chat"):
     st.session_state.messages = []
+    # [KHUSHI - US-05] Also clear the AI's internal memory
+    st.session_state.memory.clear()
 
 # ===============================
 # CHAT MEMORY (US-04)
@@ -108,15 +125,25 @@ if user_input:
     else:
         final_prompt = fun_prompt.format(question=user_input)
 
-    # ===============================
-    # GROQ RESPONSE (US-02)
-    # ===============================
-    response = llm.invoke(final_prompt)
+    # ============================================================
+    # ORIGINAL GROQ RESPONSE (US-02) 
+    # ============================================================
+    # This section was the original implementation for US-02.
+    
+    # response = llm.invoke(final_prompt) 
+    # st.chat_message("assistant").write(response.content)
 
-    st.chat_message("assistant").write(response.content)
-
-    # store assistant message
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": response.content
-    })
+    # ============================================================
+    # We upgraded from 'llm.invoke' to 'conversation.predict' 
+    # to allow the bot to remember previous context (Memory).
+    
+   # ============================================================
+    # EXECUTION (US-06 & US-08)
+    # ============================================================
+    with st.chat_message("assistant"):
+        # [KHUSHI - US-06]: New Dynamic Callback for true word-by-word streaming
+        st_callback = StreamlitCallbackHandler(st.container())
+        
+        # We pass 'callbacks' into the predict function so it streams live
+        full_response = conversation.predict(input=final_prompt, callbacks=[st_callback])
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
