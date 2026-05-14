@@ -1,24 +1,30 @@
 import streamlit as st
-from langchain_groq import ChatGroq
-from langchain_core.prompts import PromptTemplate
 from dotenv import load_dotenv
 import os
-from langchain_classic.chains import ConversationChain
-from langchain_classic.memory import ConversationBufferMemory
-from langchain_community.callbacks import StreamlitCallbackHandler 
+from langchain_groq import ChatGroq
+from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage, AIMessage
+
 load_dotenv()
 
 # ===============================
 # PAGE CONFIG
 # ===============================
 st.set_page_config(page_title="AI Chatbot", layout="centered")
-
 st.title("🤖 AI Chatbot using LangChain")
 
 # ===============================
-# PROMPT TEMPLATES (US-03)
+# LLM SETUP
 # ===============================
+llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    api_key=os.getenv("GROQ_API_KEY"),
+    streaming=True
+)
 
+# ===============================
+# PROMPT TEMPLATES
+# ===============================
 general_prompt = PromptTemplate(
     input_variables=["question"],
     template="""
@@ -50,26 +56,24 @@ Reply in a casual and engaging way:
 )
 
 # ===============================
-# GROQ LLM
+# CHAIN SETUP
 # ===============================
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    api_key=os.getenv("GROQ_API_KEY"),
-    streaming=True  # [KHUSHI - US-06] Enabled streaming for the "typing" effect
-)
-# ============================================================
-# MEMORY & CHAIN SETUP (US-05 & US-07 and US-08)
-# ============================================================
-# [KHUSHI - US-05]: Conversation Memory implementation using Session State
-if "memory" not in st.session_state:
-    st.session_state.memory = ConversationBufferMemory()
+chat_prompt = ChatPromptTemplate.from_messages([
+    MessagesPlaceholder(variable_name="history"),
+    ("human", "{input}")
+])
 
-# [KHUSHI - US-07]: Basic Chaining. Linking LLM and Memory into a single pipeline
-conversation = ConversationChain(
-    llm=llm,
-    memory=st.session_state.memory,
-    verbose=True # This proves the Context is being passed in the terminal user story 8 
-)
+chain = chat_prompt | llm
+
+# ===============================
+# SESSION STATE
+# ===============================
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
 # ===============================
 # SIDEBAR
 # ===============================
@@ -82,68 +86,46 @@ prompt_type = st.sidebar.selectbox(
 
 if st.sidebar.button("Clear Chat"):
     st.session_state.messages = []
-    # [KHUSHI - US-05] Also clear the AI's internal memory
-    st.session_state.memory.clear()
+    st.session_state.chat_history = []
 
 # ===============================
-# CHAT MEMORY (US-04)
+# CHAT DISPLAY
 # ===============================
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# Show previous messages
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
 # ===============================
-# CHAT INPUT
+# CHAT INPUT & RESPONSE
 # ===============================
 user_input = st.chat_input("Type your message...")
 
-# ===============================
-# MAIN CHAT LOGIC
-# ===============================
 if user_input:
 
-    # store user message
-    st.session_state.messages.append({
-        "role": "user",
-        "content": user_input
-    })
-
+    st.session_state.messages.append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
-    # ===============================
-    # SELECT PROMPT
-    # ===============================
     if prompt_type == "General":
         final_prompt = general_prompt.format(question=user_input)
-
     elif prompt_type == "Coding":
         final_prompt = coding_prompt.format(question=user_input)
-
     else:
         final_prompt = fun_prompt.format(question=user_input)
 
-    # ============================================================
-    # ORIGINAL GROQ RESPONSE (US-02) 
-    # ============================================================
-    # This section was the original implementation for US-02.
-    
-    # response = llm.invoke(final_prompt) 
-    # st.chat_message("assistant").write(response.content)
+    # Limit history to last 10 messages to reduce token usage
+    limited_history = st.session_state.chat_history[-10:]
 
-    # ============================================================
-    # We upgraded from 'llm.invoke' to 'conversation.predict' 
-    # to allow the bot to remember previous context (Memory).
-    
-   # ============================================================
-    # EXECUTION (US-06 & US-08)
-    # ============================================================
-    with st.chat_message("assistant"):
-        # [KHUSHI - US-06]: New Dynamic Callback for true word-by-word streaming
-        st_callback = StreamlitCallbackHandler(st.container())
-        
-        # We pass 'callbacks' into the predict function so it streams live
-        full_response = conversation.predict(input=final_prompt, callbacks=[st_callback])
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
+    try:
+        with st.chat_message("assistant"):
+            full_response = st.write_stream(
+                chunk.content for chunk in chain.stream({
+                    "input": final_prompt,
+                    "history": limited_history
+                })
+            )
+
+        st.session_state.chat_history.append(HumanMessage(content=final_prompt))
+        st.session_state.chat_history.append(AIMessage(content=full_response))
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+    except Exception as e:
+        st.error(f"API Error: {str(e)}")
