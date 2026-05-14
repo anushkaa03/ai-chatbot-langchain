@@ -1,0 +1,17 @@
+{
+    "name": null,
+    "input_variables": [
+        "detail_input",
+        "question",
+        "tone_input"
+    ],
+    "optional_variables": [],
+    "output_parser": null,
+    "partial_variables": {},
+    "metadata": null,
+    "tags": null,
+    "template": "\nYou are a helpful AI assistant.\nAnswer the following question clearly and simply.\nTone: {tone_input}\nDetail Level: {detail_input}\nQuestion: {question}\nIf you are unsure about something, say \"I'm not confident about this\" instead of guessing.\n",
+    "template_format": "f-string",
+    "validate_template": false,
+    "_type": "prompt"
+}
