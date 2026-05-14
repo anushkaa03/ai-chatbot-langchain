@@ -69,15 +69,11 @@ if user_input:
     st.chat_message('user').write(user_input)
 
     if user_input.strip().lower() == 'store this context':
-        downloads = os.path.expanduser('~/Downloads')
         filename = f"chat_context_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
-        filepath = os.path.join(downloads, filename)
-        with open(filepath, 'w') as f:
-            for msg in st.session_state.messages:
-                f.write(f"{msg['role'].upper()}: {msg['content']}\n\n")
-        reply = f"Context saved to Downloads/{filename}"
-        st.chat_message('assistant').write(reply)
-        st.session_state.messages.append({'role': 'assistant', 'content': reply})
+        content = '\n'.join(f"{msg['role'].upper()}: {msg['content']}" for msg in st.session_state.messages)
+        st.chat_message('assistant').write('Click below to download your chat context:')
+        st.download_button('Download Context', data=content, file_name=filename, mime='text/plain')
+        st.session_state.messages.append({'role': 'assistant', 'content': 'Context ready to download.'})
         st.stop()
 
     if prompt_type == 'General':
