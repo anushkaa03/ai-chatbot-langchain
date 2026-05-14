@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import streamlit as st
 import json
 import os
+from datetime import datetime
 
 load_dotenv()
 
@@ -66,6 +67,19 @@ user_input = st.chat_input('Type your message!')
 if user_input:
     st.session_state.messages.append({'role': 'user', 'content': user_input})
     st.chat_message('user').write(user_input)
+
+    if user_input.strip().lower() == 'store this context':
+        downloads = os.path.expanduser('~/Downloads')
+        filename = f"chat_context_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+        filepath = os.path.join(downloads, filename)
+        with open(filepath, 'w') as f:
+            for msg in st.session_state.messages:
+                f.write(f"{msg['role'].upper()}: {msg['content']}\n\n")
+        reply = f"Context saved to Downloads/{filename}"
+        st.chat_message('assistant').write(reply)
+        st.session_state.messages.append({'role': 'assistant', 'content': reply})
+        st.stop()
+
     if prompt_type == 'General':
         final_prompt = general_prompt.format(question=user_input, tone_input=tone_input, detail_input=detail_input)
     elif prompt_type == 'Coding':
